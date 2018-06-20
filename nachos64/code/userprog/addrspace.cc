@@ -126,8 +126,8 @@ AddrSpace::AddrSpace(OpenFile *executable)
 	pageTable = new TranslationEntry[numPages];
 	for (i = 0; i < numPages; i++) {
 		pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-		pageTable[i].physicalPage = MemBitMap->Find();
-		pageTable[i].valid = true;
+		pageTable[i].physicalPage = -1;
+		pageTable[i].valid = false;
 		pageTable[i].use = false;
 		pageTable[i].dirty = false;
 		pageTable[i].readOnly = false;  // if the code segment was entirely on
@@ -142,7 +142,7 @@ AddrSpace::AddrSpace(OpenFile *executable)
 	// then, copy in the code and data segments into memory
 
 	/* Para el segmento de codigo*/
-
+	/*
 	int x = noffH.code.inFileAddr;
 	int y = noffH.initData.inFileAddr;
 	int index;
@@ -169,6 +169,7 @@ AddrSpace::AddrSpace(OpenFile *executable)
 			y+=128;
 		}
 	}
+	*/
 
 	// then, copy in the code and data segments into memory
 	/*
@@ -252,6 +253,8 @@ void AddrSpace::SaveState()
 
 	void AddrSpace::RestoreState()
 	{
-		machine->pageTable = pageTable;
+		#ifndef USE_TLB
+			machine->pageTable = pageTable;
+		#endif
 		machine->pageTableSize = numPages;
 	}
