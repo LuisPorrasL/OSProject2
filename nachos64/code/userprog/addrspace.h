@@ -15,13 +15,14 @@
 
 #include "copyright.h"
 #include "filesys.h"
+#include <string>
 
 #define UserStackSize		1024 	// increase this as necessary!
 
 class AddrSpace {
 public:
   AddrSpace(AddrSpace* other);
-  AddrSpace(OpenFile *executable);
+  AddrSpace(OpenFile *executable, std::string filename = "NULL" );
   // Create an address space,
   // initializing it with the program
   // stored in the file "executable"
@@ -33,11 +34,23 @@ public:
   void SaveState();			// Save/restore address space-specific
   void RestoreState();		// info on a context switch
 
+public:
+  static const int code = 0;
+  unsigned int data;
+  unsigned int stack;
+  std::string filename;
+
 private:
   TranslationEntry *pageTable;	// Assume linear page table translation
   // for now!
   unsigned int numPages;		// Number of pages in the virtual
   // address space
+public:
+  TranslationEntry* getPagetable()
+  {
+    return pageTable;
+  }
+
 };
 
 #endif // ADDRSPACE_H

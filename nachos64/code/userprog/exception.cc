@@ -25,6 +25,7 @@
 #include "system.h"
 #include "syscall.h"
 #include "synch.h"
+#include "noff.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -553,9 +554,46 @@ void Nachos_Join()
   returnFromSystemCall();	// This adjust the PrevPC, PC, and NextPC registers
 }// Nachos_Join
 
+void load(unsigned int vpn )
+{
+    printf("Mi archivo fuente es: %s\n", currentThread->space->filename.c_str() );
+    if ( !currentThread->space->getPagetable()[vpn].valid && !currentThread->space->getPagetable()[vpn].dirty )
+    {
+      printf("%s\n", "es invalida y limpia" );
+      /// debo leer el archivo
+      OpenFile* executable = fileSystem->Open( currentThread->space->filename.c_str() );
+      ASSERT( executable == NULL );
+
+      NoffHeader noffH;
+      executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
+
+      /* pagina es de codigo */
+      if ( vpn >= 0 && vpn < currentThread->space->data )
+      {
+          /* leer del archivo */
+          executable->ReadAt(&(machine->mainMemory[ (currentThread->space->getPagetable[ vpn ].physicalPage *128) ] ),
+          PageSize, noffH.code.inFileAddr + PageSize*vpn );
+
+      /* es de datos */
+      }else if( vpn >= currentThread->space->data && vpn < currentThread->space->stack )
+      {
+
+      }/* es de pila */
+      else
+      {
+
+      }
+
+    }else
+    {
+      printf("%s\n", "es valida y limpia" );
+    }
+}
+
 void ExceptionHandler(ExceptionType which)
 {
   int type = machine->ReadRegister(2);
+  unsigned int vpn;
 
   switch ( which ) {
 
@@ -619,7 +657,10 @@ void ExceptionHandler(ExceptionType which)
     }
     break;
     case PageFaultException:
-    printf("\nPageFaultException\n");
+      printf("\nPageFaultException\n");
+      vpn = machine->ReadRegister ( 39 );
+      printf("la pagina que falla es la : %d\n", vpn );
+      load( vpn );
     ASSERT(false);
     break;
     case ReadOnlyException:
