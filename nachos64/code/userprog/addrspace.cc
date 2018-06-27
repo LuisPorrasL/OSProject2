@@ -61,7 +61,7 @@ AddrSpace::AddrSpace( AddrSpace* other)
 {
 	numPages = other->numPages;
 	pageTable = new TranslationEntry[ numPages ];
-
+	filename = other->filename;
 	// iterar menos las 8 paginas de pila
 	long dataAndCodePages = numPages - 8;
 	long index;

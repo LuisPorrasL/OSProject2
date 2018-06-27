@@ -28,7 +28,7 @@ StartProcess(const char *filename)
 
     if (executable == NULL) {
 	     printf("Unable to open file %s\n", filename);
-	     return;
+	     ASSERT(false);
     }
     space = new AddrSpace(executable, filename );
     currentThread->space = space;

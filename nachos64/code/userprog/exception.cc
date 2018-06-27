@@ -553,16 +553,23 @@ void Nachos_Join()
   }
   returnFromSystemCall();	// This adjust the PrevPC, PC, and NextPC registers
 }// Nachos_Join
-
+int i = 0;
 void load(unsigned int vpn )
 {
-    printf("Mi archivo fuente es: %s\n", currentThread->space->filename.c_str() );
+    vpn = (vpn / PageSize);
+    printf("Voy a necesitar la página : %d\n", vpn );
+    //if ( !machine->tlb[vpn].valid && !machine->tlb[vpn].dirty )
     if ( !currentThread->space->getPagetable()[vpn].valid && !currentThread->space->getPagetable()[vpn].dirty )
     {
-      printf("%s\n", "es invalida y limpia" );
+      printf("%s\n", "\tLa cual es invalida y limpia" );
       /// debo leer el archivo
+      printf("\tPor el momento, la busco en mi archivo fuente es: %s\n", currentThread->space->filename.c_str() );
       OpenFile* executable = fileSystem->Open( currentThread->space->filename.c_str() );
-      ASSERT( executable == NULL );
+
+      if (executable == NULL) {
+         printf("Unable to open file %s\n", currentThread->space->filename.c_str() );
+         ASSERT(false);
+      }
 
       NoffHeader noffH;
       executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
@@ -571,22 +578,61 @@ void load(unsigned int vpn )
       if ( vpn >= 0 && vpn < currentThread->space->data )
       {
           /* leer del archivo */
-          executable->ReadAt(&(machine->mainMemory[ (currentThread->space->getPagetable[ vpn ].physicalPage *128) ] ),
+          int freeFrame = MemBitMap->Find();
+          printf("Frame libre: %d\n", freeFrame );
+          currentThread->space->getPagetable()[ vpn ].physicalPage = freeFrame;
+
+          executable->ReadAt(&(machine->mainMemory[ (currentThread->space->getPagetable()[ vpn ].physicalPage *128) ] ),
           PageSize, noffH.code.inFileAddr + PageSize*vpn );
 
+          currentThread->space->getPagetable()[ vpn ].valid = true;
+          machine->tlb[ i ].virtualPage = vpn;
+          machine->tlb[ i ].physicalPage = freeFrame;
+          machine->tlb[ i ].valid = true;
+          ++i;
+          if ( i == 4)
+            i = 0;
       /* es de datos */
-      }else if( vpn >= currentThread->space->data && vpn < currentThread->space->stack )
+    }else if( noffH.uninitData.size + noffH.initData.size > 0 ) // puede que no haya inicializado como en halt :(
       {
-
+        if ( vpn >= currentThread->space->data && vpn < currentThread->space->stack  )
+        {
+            printf("%s\n", "Pagina de datos" );
+            ASSERT(false);
+        }
       }/* es de pila */
-      else
+      else if ( vpn > currentThread->space->stack && vpn < currentThread->space->numPages  )
       {
-
+        printf("\t\t\t%s\n", "Pagina de pila" );
+        ASSERT(false);
+      }else
+      {
+        printf("%sCodigo: %d, Datos: %d, Pila: %d, Numero de pags: %d\n", "Algo raro ", 0,
+        noffH.uninitData.size + noffH.initData.size , currentThread->space->stack, currentThread->space->numPages );
+        ASSERT(false);
       }
+      delete executable;
+    }
+    //else if (!machine->tlb[vpn].valid && machine->tlb[vpn].dirty)
+    else if ( !currentThread->space->getPagetable()[vpn].valid && currentThread->space->getPagetable()[vpn].dirty )
+    {
+      printf("\t%s\n", "La cual es invalida y sucia" );
+      ASSERT(false);
 
+    }
+    //else if ( machine->tlb[vpn].valid && !machine->tlb[vpn].dirty)
+    else if ( currentThread->space->getPagetable()[vpn].valid && !currentThread->space->getPagetable()[vpn].dirty )
+    {
+      printf("\t%s\n", "La cual es valida y limpia" );
+      printf("\t%s\n", "Aquí necesito el campo cero de la TLB en FIFO y debería guardarlo" );
+      printf("\t%s\n", "Quiero acceder a una página que esta en memoria o en swap" );
+      printf("\t%s\n", "Debo buscarla y meterla en memoria principal" );
+      printf("\t%s\n", "Y finalmente actualizar TBL" );
+      ASSERT(false);
     }else
     {
-      printf("%s\n", "es valida y limpia" );
+      printf("\t%s\n", "La cual es valida y sucia" );
+      ASSERT(false);
     }
 }
 
@@ -659,9 +705,7 @@ void ExceptionHandler(ExceptionType which)
     case PageFaultException:
       printf("\nPageFaultException\n");
       vpn = machine->ReadRegister ( 39 );
-      printf("la pagina que falla es la : %d\n", vpn );
       load( vpn );
-    ASSERT(false);
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");
