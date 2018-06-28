@@ -37,6 +37,8 @@ public:
 public:
   static const int code = 0;
   unsigned int data;
+  unsigned int initData;
+  unsigned int noInitData;
   unsigned int stack;
   std::string filename;
 
@@ -51,6 +53,7 @@ public:
   {
     return pageTable;
   }
+  void load(unsigned int vpn );
 
 };
 

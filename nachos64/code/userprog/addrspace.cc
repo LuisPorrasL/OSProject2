@@ -141,8 +141,14 @@ AddrSpace::AddrSpace(OpenFile *executable, std::string filename )
 		// pages to be read-only
 	}
 
-	data =  divRoundUp(noffH.code.size, numPages);
+
+	initData = divRoundUp(noffH.code.size, PageSize);
+	noInitData = divRoundUp(noffH.initData.size, PageSize);
 	stack = numPages - 8;
+	// ajustes
+	initData += noInitData;
+	noInitData += stack;
+
 
 	#ifndef VM
 		// zero out the entire address space, to zero the unitialized data segment
@@ -266,3 +272,92 @@ void AddrSpace::SaveState()
 		#endif
 		machine->pageTableSize = numPages;
 	}
+
+
+/* for virtual mem*/
+void AddrSpace::load(unsigned int vpn )
+{
+    //printf("Voy a necesitar la página : %d y  numero paginas %d\n", vpn, numPages );
+    //if ( !machine->tlb[vpn].valid && !machine->tlb[vpn].dirty )
+		printf("Codigo va de [%d, %d[ \n", 0, initData );
+		printf("Datos incializados va de [%d, %d[ \n", initData, noInitData);
+		printf("Datos no incializados va de [%d, %d[ \n", initData ,stack );
+		printf("Pila va de [%d, %d[ \n", stack, numPages );
+    if ( !pageTable[vpn].valid && !pageTable[vpn].dirty )
+    {
+	      printf("%s\n", "\tLa cual es invalida y limpia" );
+	      /// debo leer el archivo
+	      printf("\tPor el momento, la busco en mi archivo fuente es: %s\n", filename.c_str() );
+	      OpenFile* executable = fileSystem->Open( filename.c_str() );
+
+	      if (executable == NULL) {
+	         printf("Unable to open file %s\n", filename.c_str() );
+	         ASSERT(false);
+	      }
+
+	      NoffHeader noffH;
+	      executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
+
+	      /* pagina es de codigo */
+	      if ( vpn >= 0 && vpn < initData )
+	      {
+	          /* leer del archivo */
+	          int freeFrame = MemBitMap->Find();
+	          printf("Frame libre: %d\n", freeFrame );
+	          pageTable[ vpn ].physicalPage = freeFrame;
+
+	          executable->ReadAt(&(machine->mainMemory[ (pageTable[ vpn ].physicalPage *128) ] ),
+	          PageSize, noffH.code.inFileAddr + PageSize*vpn );
+
+	          pageTable[ vpn ].valid = true;
+	          machine->tlb[ indexFIFO ].virtualPage = vpn;
+	          machine->tlb[ indexFIFO ].physicalPage = freeFrame;
+	          machine->tlb[ indexFIFO ].valid = true;
+	          printf("Uso campo en TLB: %d\n", indexFIFO );
+	          ++indexFIFO;
+	          indexFIFO = indexFIFO % TLBSize;
+	      /* es de datos */
+	    }else if( vpn >= initData && vpn < noInitData ) // puede que no haya inicializado como en halt :(
+      {
+            printf("%s\n", "Pagina de datos inicializados" );
+            ASSERT(false);
+
+      }else if( vpn >= noInitData && vpn < stack ) // puede que no haya inicializado como en halt :(
+      {
+            printf("%s\n", "Pagina de datos no inicializados" );
+            ASSERT(false);
+      }
+      else if ( vpn >= stack && vpn < numPages  )
+      {
+        printf("\t\t\t%s\n", "Pagina de pila" );
+        ASSERT(false);
+      }else
+      {
+        printf("%sCodigo: %d, Datos: %d, Pila: %d, Numero de pags: %d\n", "Algo raro ", 0,
+        noffH.uninitData.size + noffH.initData.size , stack, numPages );
+        ASSERT(false);
+      }
+      delete executable;
+    }
+    //else if (!machine->tlb[vpn].valid && machine->tlb[vpn].dirty)
+    else if ( !pageTable[vpn].valid && pageTable[vpn].dirty )
+    {
+      printf("\t%s\n", "La cual es invalida y sucia" );
+      ASSERT(false);
+
+    }
+    //else if ( machine->tlb[vpn].valid && !machine->tlb[vpn].dirty)
+    else if ( pageTable[vpn].valid && !pageTable[vpn].dirty )
+    {
+      printf("\t%s\n", "La cual es valida y limpia" );
+      printf("\t%s\n", "Aquí necesito el campo cero de la TLB en FIFO y debería guardarlo" );
+      printf("\t%s\n", "Quiero acceder a una página que esta en memoria o en swap" );
+      printf("\t%s\n", "Debo buscarla y meterla en memoria principal" );
+      printf("\t%s\n", "Y finalmente actualizar TBL" );
+      ASSERT(false);
+    }else
+    {
+      printf("\t%s\n", "La cual es valida y sucia" );
+      ASSERT(false);
+    }
+}
