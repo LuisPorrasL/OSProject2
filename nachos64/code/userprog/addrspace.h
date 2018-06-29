@@ -18,6 +18,7 @@
 #include <string>
 
 #define UserStackSize		1024 	// increase this as necessary!
+#define SWAPFILENAME "SWAP.txt"
 
 class AddrSpace {
 public:
@@ -46,6 +47,9 @@ public:
 
 private:
   TranslationEntry *pageTable;	// Assume linear page table translation
+  void showTLBState();
+  int writeIntoSwap( int physicalPageVictim );
+  void readFromSwap( int swapPage, int physicalPage );
   // for now!
   // address space
 public:

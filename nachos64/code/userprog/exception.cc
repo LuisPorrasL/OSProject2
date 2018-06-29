@@ -95,7 +95,7 @@ void Nachos_Open() {                    // System call 5
 
   int r4 = machine->ReadRegister( 4 );
   char fileName [128] = {0};
-  int c = 0, i = 0;
+  int c = '*', i = 0;
   do{
     machine->ReadMem(r4, 1, &c);
     r4++;
@@ -112,7 +112,8 @@ void Nachos_Open() {                    // System call 5
       return;
     }
   }
-  printf("Error: unable to open file\n");
+  perror("\t\tError: unable to open file: ");
+  printf("<<%s>>\n", fileName );
   returnFromSystemCall();		// Update the PC registers
 }// Nachos_Open
 
@@ -170,7 +171,7 @@ void Nachos_Read(){
       machine->WriteRegister(2, readBytes );
     }else // otherwise no chars read
     {
-      printf("Error: unable to read file\n");
+      printf("\t\tError: unable to read file\n");
       machine->WriteRegister(2,-1);
     }
     break;
@@ -242,24 +243,35 @@ returnFromSystemCall();		// Update the PC registers
 
 void Nachos_Create(){
   ///printf("Creating!\n");
-  int r4 = machine->ReadRegister(4); // read from register 4
+  int r4 = machine->ReadRegister( 4 ); // read from register 4
   char fileName[256] = {0}; // need to store file name to unix create sc
   int c, i; // counter
   i = 0;
-
+  /*
+  c = '*';
+  machine->ReadMem( r4 , 1 , &c );
+  printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
+  machine->ReadMem( r4 , 1 , &c );
+  printf("\n\tOJO EL PAGEFAULT HACE ALGO RARO\n");
+  printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
+  machine->ReadMem( r4 , 1 , &c );
+  printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
+  */
   do
   {
     machine->ReadMem( r4 , 1 , &c ); // read from nachos mem
     r4++;
-    fileName[i++] = c;
+    fileName[i] = c;
+    ++i;
   }while (c != 0 );
-
-  int createResult = creat (fileName, O_CREAT | S_IRWXU ); // create with read write destroy authorization
-  close(createResult);
+  int createResult = creat (fileName, O_CREAT|S_IRWXU ); // create with read write destroy authorization
+  printf("Se crea el archivo: %s\n", fileName );
   if (-1 == createResult )
   {
-    printf("Error: unable to create new file\n");
+    perror("\t\tError: unable to create new file");
+    printf("<<%s>>\n", fileName );
   }
+  close(createResult);
   returnFromSystemCall();		// Update the PC registers
 }// Nachos_Create
 
@@ -621,10 +633,9 @@ void ExceptionHandler(ExceptionType which)
     }
     break;
     case PageFaultException:
-      printf("\nPageFaultException\n");
-      printf("Direccion %d\n",machine->ReadRegister ( 39 ) );
-      vpn = ( machine->ReadRegister ( 39 ) / PageSize );
-      currentThread->space->load( vpn );
+      DEBUG('v', "\nPageFaultException\n");
+      vpn = machine->ReadRegister ( 39 );
+      currentThread->space->load( vpn / PageSize );
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");

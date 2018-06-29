@@ -1,8 +1,8 @@
-// system.cc 
+// system.cc
 //	Nachos initialization and cleanup routines.
 //
 // Copyright (c) 1992-1993 The Regents of the University of California.
-// All rights reserved.  See copyright.h for copyright notice and limitation 
+// All rights reserved.  See copyright.h for copyright notice and limitation
 // of liability and disclaimer of warranty provisions.
 
 #include "copyright.h"
@@ -19,7 +19,7 @@ Interrupt *interrupt;			// interrupt status
 Statistics *stats;			// performance metrics
 Timer *timer;				// the hardware timer device,
 					// for invoking context switches
-					
+
 // 2007, Jose Miguel Santos Espino
 PreemptiveScheduler* preemptiveScheduler = NULL;
 const long long DEFAULT_TIME_SLICE = 50000;
@@ -35,6 +35,8 @@ SynchDisk   *synchDisk;
 #ifdef USER_PROGRAM	// requires either FILESYS or FILESYS_STUB
 Machine *machine;
 BitMap* MemBitMap;	// user program memory and registers
+BitMap* SWAPBitMap;
+int indexFIFO;
 #endif
 
 #ifdef NETWORK
@@ -58,8 +60,8 @@ extern void Cleanup();
 //	Note that instead of calling Yield() directly (which would
 //	suspend the interrupt handler, not the interrupted thread
 //	which is what we wanted to context switch), we set a flag
-//	so that once the interrupt handler is done, it will appear as 
-//	if the interrupted thread called Yield at the point it is 
+//	so that once the interrupt handler is done, it will appear as
+//	if the interrupted thread called Yield at the point it is
 //	was interrupted.
 //
 //	"dummy" is because every interrupt handler takes one argument,
@@ -75,10 +77,10 @@ TimerInterruptHandler(void* dummy)
 //----------------------------------------------------------------------
 // Initialize
 // 	Initialize Nachos global data structures.  Interpret command
-//	line arguments in ALRMorder to determine flags for the initialization.  
-// 
+//	line arguments in ALRMorder to determine flags for the initialization.
+//
 //	"argc" is the number of command line arguments (including the name
-//		of the command) -- ex: "nachos -d +" -> argc = 3 
+//		of the command) -- ex: "nachos -d +" -> argc = 3
 //	"argv" is an array of strings, one for each command line argument
 //		ex: "nachos -d +" -> argv = {"nachos", "-d", "+"}
 //----------------------------------------------------------------------
@@ -86,15 +88,17 @@ void
 Initialize(int argc, char **argv)
 {
     MemBitMap =  new BitMap( NumPhysPages );
+		SWAPBitMap =  new BitMap( NumPhysPages*2 );
+		indexFIFO = 0;
     int argCount;
     const char* debugArgs = "";
     bool randomYield = false;
-    
+
 
 // 2007, Jose Miguel Santos Espino
     bool preemptiveScheduling = false;
     long long timeSlice;
-    
+
 #ifdef USER_PROGRAM
     bool debugUserProg = false;	// single step user program
 #endif
@@ -105,7 +109,7 @@ Initialize(int argc, char **argv)
     double rely = 1;		// network reliability
     int netname = 0;		// UNIX socket name
 #endif
-    
+
     for (argc--, argv++; argc > 0; argc -= argCount, argv += argCount) {
 	argCount = 1;
 	if (!strcmp(*argv, "-d")) {
@@ -164,20 +168,20 @@ Initialize(int argc, char **argv)
 
     // We didn't explicitly allocate the current thread we are running in.
     // But if it ever tries to give up the CPU, we better have a Thread
-    // object to save its state. 
-    currentThread = new Thread("main");		
+    // object to save its state.
+    currentThread = new Thread("main");
     currentThread->setStatus(RUNNING);
 
     interrupt->Enable();
     CallOnUserAbort(Cleanup);			// if user hits ctl-C
-    
+
     // Jose Miguel Santos Espino, 2007
     if ( preemptiveScheduling ) {
         preemptiveScheduler = new PreemptiveScheduler();
         preemptiveScheduler->SetUp(timeSlice);
     }
 
-    
+
 #ifdef USER_PROGRAM
     machine = new Machine(debugUserProg);	// this must come first
 #endif
@@ -211,7 +215,7 @@ Cleanup()
 #ifdef NETWORK
     delete postOffice;
 #endif
-    
+
 #ifdef USER_PROGRAM
     delete machine;
 #endif
@@ -223,11 +227,10 @@ Cleanup()
 #ifdef FILESYS
     delete synchDisk;
 #endif
-    
+
     delete timer;
     delete scheduler;
     delete interrupt;
-    
+
     Exit(0);
 }
-
