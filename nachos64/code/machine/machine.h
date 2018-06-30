@@ -131,6 +131,7 @@ class Machine {
     				// Read or write 1, 2, or 4 bytes of virtual
 				// memory (at addr).  Return false if a
 				// correct translation couldn't be found.
+	  void SafeReadMem(int addr, int size, int* value);
 
     ExceptionType Translate(int virtAddr, int* physAddr, int size,bool writing);
     				// Translate an address, and check for

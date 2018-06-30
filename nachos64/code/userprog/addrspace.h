@@ -53,10 +53,6 @@ private:
   // for now!
   // address space
 public:
-  TranslationEntry* getPagetable()
-  {
-    return pageTable;
-  }
   void load(unsigned int vpn );
 
 };

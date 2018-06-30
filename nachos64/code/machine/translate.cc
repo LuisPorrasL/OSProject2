@@ -121,6 +121,11 @@ Machine::ReadMem(int addr, int size, int *value)
     return true;
 }
 
+void  Machine::SafeReadMem(int addr, int size, int* value){
+	while(!ReadMem(addr, size, value));
+	return;
+}
+
 //----------------------------------------------------------------------
 // Machine::WriteMem
 //      Write "size" (1, 2, or 4) bytes of the contents of "value" into

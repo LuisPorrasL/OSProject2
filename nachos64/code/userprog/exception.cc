@@ -97,7 +97,7 @@ void Nachos_Open() {                    // System call 5
   char fileName [128] = {0};
   int c = '*', i = 0;
   do{
-    machine->ReadMem(r4, 1, &c);
+    machine->SafeReadMem(r4, 1, &c);
     r4++;
     fileName[i++] = c;
   }while(c != 0);
@@ -194,7 +194,7 @@ char buffer[size+1] = {0};
 
 int c = 0, i = 0;
 do{
-  machine->ReadMem(r4, 1, &c);
+  machine->SafeReadMem(r4, 1, &c);
   r4++;
   buffer[i++] = c;
 }while(i < size);
@@ -249,17 +249,17 @@ void Nachos_Create(){
   i = 0;
   /*
   c = '*';
-  machine->ReadMem( r4 , 1 , &c );
+  machine->SafeReadMem( r4 , 1 , &c );
   printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
-  machine->ReadMem( r4 , 1 , &c );
+  machine->SafeReadMem( r4 , 1 , &c );
   printf("\n\tOJO EL PAGEFAULT HACE ALGO RARO\n");
   printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
-  machine->ReadMem( r4 , 1 , &c );
+  machine->SafeReadMem( r4 , 1 , &c );
   printf("\n\tMeto char apuntado por r4 en c, c = <<%c>>\n",c );
   */
   do
   {
-    machine->ReadMem( r4 , 1 , &c ); // read from nachos mem
+    machine->SafeReadMem( r4 , 1 , &c ); // read from nachos mem
     r4++;
     fileName[i] = c;
     ++i;
@@ -511,7 +511,7 @@ void Nachos_Exec(){
 
   do
   {
-    machine->ReadMem( r4 , 1 , &c ); // read from nachos mem
+    machine->SafeReadMem( r4 , 1 , &c ); // read from nachos mem
     r4++;
     name[i++] = c;
   }while (c != 0 );
