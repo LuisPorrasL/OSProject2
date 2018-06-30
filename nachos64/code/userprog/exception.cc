@@ -150,7 +150,7 @@ void Nachos_Read(){
     // write into Nachos mem
     for (int index = 0; index < readBytes; ++  index )
     {
-      machine->WriteMem(r4, 1, bufferReader[index] );
+      machine->SafeWriteMem(r4, 1, bufferReader[index] );
       ++r4;
     }
     machine->WriteRegister(2, readBytes );
@@ -164,7 +164,7 @@ void Nachos_Read(){
       // write into Nachos mem
       for (int index = 0; index < readBytes; ++  index )
       {
-        machine->WriteMem(r4, 1, bufferReader[index] );
+        machine->SafeWriteMem(r4, 1, bufferReader[index] );
         ++r4;
       }
       // return amount of read readBytes

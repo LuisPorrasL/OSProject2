@@ -173,6 +173,11 @@ Machine::WriteMem(int addr, int size, int value)
     return true;
 }
 
+void Machine::SafeWriteMem(int addr, int size, int value){
+	while(!WriteMem(addr, size, value));
+	return;
+}
+
 //----------------------------------------------------------------------
 // Machine::Translate
 // 	Translate a virtual address into a physical address, using

@@ -431,13 +431,30 @@ void AddrSpace::load(unsigned int vpn )
 	//Si la pagina es valida y no esta sucia.
 	else if(pageTable[vpn].valid && !pageTable[vpn].dirty){
 		DEBUG('v', "\tPagina valida y limpia\n");
-		ASSERT(false);
+		// Se hace efectivo el cambio en la TLB
+		machine->tlb[ indexFIFO ].virtualPage = vpn;
+		machine->tlb[ indexFIFO ].physicalPage = pageTable[vpn].physicalPage;
+		machine->tlb[ indexFIFO ].valid = true;
+		machine->tlb[ indexFIFO ].dirty = false;
+		DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
+		++indexFIFO;
+		indexFIFO = indexFIFO % TLBSize;
+		//ASSERT(false);
 		//La pagina ya esta en memoria por lo que solamente debo actualizar el TLB.
 	}
 	//Si la pagina es valida y esta sucia.
 	else{
 		DEBUG('v', "\tPagina valida y sucia\n");
-		ASSERT(false);
+		DEBUG('v', "\tPagina valida y limpia\n");
+		// Se hace efectivo el cambio en la TLB
+		machine->tlb[ indexFIFO ].virtualPage = vpn;
+		machine->tlb[ indexFIFO ].physicalPage = pageTable[vpn].physicalPage;
+		machine->tlb[ indexFIFO ].valid = true;
+		machine->tlb[ indexFIFO ].dirty = true;
+		DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
+		++indexFIFO;
+		indexFIFO = indexFIFO % TLBSize;
+		//ASSERT(false);
 		//La pagina ya esta en memoria por lo que solamente debo actualizar el TLB.
 	}
 }
