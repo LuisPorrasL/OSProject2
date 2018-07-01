@@ -191,15 +191,14 @@ void Nachos_Write() {                   // System call 7
 int r4 = machine->ReadRegister( 4 );
 int size = machine->ReadRegister( 5 );	// Read size to write
 char buffer[size+1] = {0};
-
-int c = 0, i = 0;
+int c = '*', i = 0;
 do{
   machine->SafeReadMem(r4, 1, &c);
   r4++;
   buffer[i++] = c;
 }while(i < size);
 
-//printf("%s\n", buffer);
+//printf("Texto para escribrir en archivo: <<%s>>\n", buffer);
 
 // buffer = Read data from address given by user;
 OpenFileId id = machine->ReadRegister( 6 );	// Read file descriptor
@@ -304,7 +303,6 @@ void NachosForkThread( void * p ) { // for 64 bits version
 
   machine->WriteRegister( PCReg, dir );
   machine->WriteRegister( NextPCReg, dir + 4 );
-
 
   machine->Run();                     // jump to the user progam
 
@@ -482,10 +480,10 @@ void NachosExecThread( void* id)
   AddrSpace *space;
 
   if (executable == NULL) {
-    printf("Unable to open file %s\n",info->fileName.c_str());
+    printf("Unable to open executable file <<%s>>\n",info->fileName.c_str());
     return;
   }
-  space = new AddrSpace( executable );
+  space = new AddrSpace( executable, info->fileName.c_str() );
   delete currentThread->space; // i dont need may space anymore
   currentThread->space = space;
 
@@ -515,6 +513,7 @@ void Nachos_Exec(){
     r4++;
     name[i++] = c;
   }while (c != 0 );
+
   std::string s = name;
   joinS* newE = new joinS();
 
@@ -633,9 +632,9 @@ void ExceptionHandler(ExceptionType which)
     }
     break;
     case PageFaultException:
-      DEBUG('v', "\nPageFaultException\n");
-      vpn = machine->ReadRegister ( 39 );
-      currentThread->space->load( vpn / PageSize );
+        DEBUG('v', "\nPageFaultException\n");
+        vpn = machine->ReadRegister ( 39 );
+        currentThread->space->load( vpn / PageSize );
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");

@@ -48,6 +48,8 @@ public:
 private:
   TranslationEntry *pageTable;	// Assume linear page table translation
   void showTLBState();
+  void showIPTState();
+  void showPageTableState();
   int writeIntoSwap( int physicalPageVictim );
   void readFromSwap( int swapPage, int physicalPage );
   // for now!

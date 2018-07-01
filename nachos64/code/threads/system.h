@@ -35,6 +35,9 @@ extern Machine* machine;	// user program memory and registers
 extern BitMap* MemBitMap;
 extern BitMap* SWAPBitMap;
 extern int indexFIFO;
+extern int indexSWAPFIFO;
+extern TranslationEntry* IPT;
+extern TranslationEntry* K[NumPhysPages];
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB
