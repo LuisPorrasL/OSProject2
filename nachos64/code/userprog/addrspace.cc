@@ -263,17 +263,15 @@ AddrSpace::InitRegisters()
 void AddrSpace::SaveState()
 {
 		DEBUG ( 't', "\nSe salva el estado del hilo: %s\n", currentThread->getName() );
-		// se salva la TLB a la pageTable del hilo actualizar
-		/*
-		showTLBState();
-		for (int index = 0; index < TLBSize; ++index )
-		{
-			pageTable[ machine->tlb [index].virtualPage ].valid = machine->tlb [index].valid;
+		for(int i = 0; i < TLBSize; ++i){
+			pageTable[machine->tlb[i].virtualPage] = machine->tlb[i];
 		}
 		delete machine->tlb;
 		machine->tlb = new TranslationEntry[ TLBSize ];
-		indexFIFO = 0;
-		*/
+		for (int i = 0; i < TLBSize; ++i)
+		{
+			machine->tlb[i].valid = false;
+		}
 }
 
 	//----------------------------------------------------------------------
@@ -290,13 +288,16 @@ void AddrSpace::SaveState()
 			machine->pageTable = pageTable;
 			machine->pageTableSize = numPages;
 		#endif
+
 		DEBUG ( 't', "\nSe restaura el estado del hilo: %s\n", currentThread->getName() );
-		/*
+
+		indexFIFO = 0;
 		delete machine->tlb;
 		machine->tlb = new TranslationEntry[ TLBSize ];
-		indexFIFO = 0;
-		showTLBState();
-		*/
+		for (int i = 0; i < TLBSize; ++i)
+		{
+			machine->tlb[i].valid = false;
+		}
 	}
 
 void AddrSpace::showIPTState()
@@ -358,12 +359,38 @@ void AddrSpace::readFromSwap( int swapPage, int physicalPage )
 	}
 }
 
+void AddrSpace::updateTLBSC(unsigned int vpn)
+{
+	bool unUsePage = false;
+	int secondChanceIndex = 0;
+
+	if(indexFIFO < TLBSize){	//Estoy en la primer pasada
+		machine->tlb[indexFIFO] = pageTable[vpn]; //Actualizo el TLB
+		++indexFIFO;
+	}
+	else //Estoy recorriendo la TLB nuevamente
+	{
+		while(!unUsePage){
+			secondChanceIndex = indexFIFO%TLBSize;
+			if(machine->tlb[secondChanceIndex].use){ //Guardo los cambios del TLB al pageTable
+				machine->tlb[secondChanceIndex].use = false;
+				pageTable[machine->tlb[secondChanceIndex].virtualPage] = machine->tlb[secondChanceIndex];
+			}
+			else{ //Puedo remplazar este campo de la TLB
+				unUsePage = true;
+				machine->tlb[secondChanceIndex] = pageTable[vpn];
+			}
+			++indexFIFO;
+		}
+	}
+	DEBUG('v', "\tPagina del TLB asignada %d\n\n", (indexFIFO-1)%TLBSize);
+}
+
 /* for virtual mem*/
 void AddrSpace::load(unsigned int vpn )
 {
 	int freeFrame;
 	DEBUG('v', "Numero de paginas: %d, hilo actual: %s\n", numPages, currentThread->getName());
-	DEBUG('v', "Pagina que falla: %d\n", vpn);
 	DEBUG('v', "\tCodigo va de [%d, %d[ \n", 0, initData);
 	DEBUG('v',"\tDatos incializados va de [%d, %d[ \n", initData, noInitData);
 	DEBUG('v', "\tDatos no incializados va de [%d, %d[ \n", noInitData , stack);
@@ -391,30 +418,21 @@ void AddrSpace::load(unsigned int vpn )
 
 			if ( freeFrame != -1  )
 			{
-				DEBUG('v',"Frame libre en memoria: %d\n", freeFrame );
+				DEBUG('v',"\tFrame libre en memoria: %d\n", freeFrame );
 				pageTable[ vpn ].physicalPage = freeFrame;
 				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * 128 ) ] ),
 				PageSize, noffH.code.inFileAddr + PageSize*vpn );
 				pageTable[ vpn ].valid = true;
 
-				/*Se actualiza cual pagina fisica es refenciada por la vitual vpn*/
-				//IPT[ freeFrame ] = (pageTable[ vpn ]);
-				K[freeFrame] = &(pageTable[ vpn ]);
+				//Se actualiza la TLB invertida
+				//K[freeFrame] = &(pageTable[ vpn ]);
 
-				/* Se hace efectivo el cambio en la TLB*/
-				machine->tlb[ indexFIFO ].virtualPage = vpn;
-				machine->tlb[ indexFIFO ].physicalPage = freeFrame;
-				machine->tlb[ indexFIFO ].valid = true;
-				DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-				++indexFIFO;
-				indexFIFO = indexFIFO % TLBSize;
+				//Se debe actualizar el TLB
+				updateTLBSC(vpn);
 
 			}else
 			{
-				/***************************************************************/
-				/* Estos casos son los que se mandan al swap*/
-				DEBUG('v', "\t\t\tUps! No hay más memoria, es momento de enviar a una victima al swap\n" );
-				/***************************************************************/
+				//Se debe selecionar una victima para enviar al SWAP
 				ASSERT(false);
 			}
 		}
@@ -431,159 +449,44 @@ void AddrSpace::load(unsigned int vpn )
 				PageSize, noffH.initData.inFileAddr + PageSize*vpn );
 				pageTable[ vpn ].valid = true;
 
-				/*Se actualiza cual pagina fisica es refenciada por la vitual vpn*/
-				//IPT[ freeFrame ] = (pageTable[ vpn ]);
-				K[freeFrame] = &(pageTable[ vpn ]);
-				/* Se hace efectivo el cambio en la TLB*/
-				machine->tlb[ indexFIFO ].virtualPage = vpn;
-				machine->tlb[ indexFIFO ].physicalPage = freeFrame;
-				machine->tlb[ indexFIFO ].valid = true;
-				DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-				++indexFIFO;
-				indexFIFO = indexFIFO % TLBSize;
+				//Se actualiza la TLB invertida
+				//K[freeFrame] = &(pageTable[ vpn ]);
+
+				//Se debe actualizar el TLB
+				updateTLBSC(vpn);
+
 			}else
 			{
-				/* Estos casos son los que se mandan al swap*/
-				DEBUG('v', "\t\t\tUps! No hay más memoria, es momento de enviar a una victima al swap\n" );
-				int swapPage = writeIntoSwap( indexSWAPFIFO );
-				DEBUG('v', "\t\t\tVictima del SWAP por ahora es FIFO. Esta página física se va: %d\n", indexSWAPFIFO );
-				if ( swapPage == -1 )
-				{
-					DEBUG('v', "\t\t\tSWAP INSUFICIENTE\n");
-					ASSERT(false);
-				}else
-				{
-					DEBUG('v', "\t\t\tPero no conozco cuál hilo tiene la página física #<<%d>>. Reviso tabla de invertidas\n", indexSWAPFIFO );
-					//if ( IPT[indexSWAPFIFO].dirty )
-					if ( K[indexSWAPFIFO]->dirty )
-					{
-						DEBUG('v', "\t\t\tLuego de revisar me doy cuenta que sí esta sucia.\n" );
-						ASSERT(false);
-					}else
-					{
-						//showPageTableState();
-						DEBUG('v', "\t\t\tLuego de revisar me doy cuenta que NO esta sucia.\n" );
-						DEBUG('v', "\t\t\tNo hay necesidad de enviar al SWAP. Solo se actualiza que ya no está en memoria\n" );
-						//IPT[indexSWAPFIFO].valid = false;
-						//IPT[indexSWAPFIFO].physicalPage = -1;
-						K[indexSWAPFIFO]->valid = false;
-						K[indexSWAPFIFO]->physicalPage = -1;
-						//showPageTableState();
-
-						DEBUG('v', "\t\t\tY se le otorga está la pagina %d a quien la ocupe\n", indexSWAPFIFO );
-						DEBUG('v', "\t\t\tY se libera el MemBitMap[%d]\n", indexSWAPFIFO);
-						MemBitMap->Clear( indexSWAPFIFO );
-
-						DEBUG('v', "\t\t\tSe le carga la página en memoria que ocupa el proceso\n");
-						freeFrame = MemBitMap->Find();
-						pageTable[ vpn ].physicalPage = freeFrame;
-						executable->ReadAt(&(machine->mainMemory[ ( freeFrame * 128 ) ] ),
-						PageSize, noffH.initData.inFileAddr + PageSize*vpn );
-						pageTable[ vpn ].valid = true;
-
-						DEBUG('v', "\t\t\tSe actualiza el TLB[%d] y IPT[%d]\n",indexFIFO,freeFrame);
-						//IPT[ indexSWAPFIFO ] = (pageTable[ vpn ]);
-						K[ indexSWAPFIFO ] = &(pageTable[ vpn ]);
-
-						/* Se hace efectivo el cambio en la TLB*/
-						machine->tlb[ indexFIFO ].virtualPage = vpn;
-						machine->tlb[ indexFIFO ].physicalPage = freeFrame;
-						machine->tlb[ indexFIFO ].valid = true;
-						DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-						++indexFIFO;
-						indexFIFO = indexFIFO % TLBSize;
-					}
-					/*Siguiente en ser reemplzada será FIFO*/
-					++indexSWAPFIFO;
-					indexSWAPFIFO = indexSWAPFIFO % NumPhysPages;
-				}
-				//ASSERT(false);
+				//Se debe selecionar una victima para enviar al SWAP
+				ASSERT(false);
 			}
 		}
 		else if(vpn >= noInitData && vpn < numPages){ //segemento de Datos No Inicializados o segmento de Pila.
-			DEBUG('v',"\t\t1.3 Página de datos no Inicializado o página de pila\n");
+			//DEBUG('v',"\t\t1.3 Página de datos no Inicializado o página de pila\n");
 			freeFrame = MemBitMap->Find();
-			DEBUG('v',"\t\t\tSe busca una nueva página para otorgar\n" );
+			//DEBUG('v',"\t\t\tSe busca una nueva página para otorgar\n" );
 			if ( freeFrame != -1 )
 			{
-				DEBUG('v', "Se le otorga una nueva página en memoria\n" );
+				//DEBUG('v', "Se le otorga una nueva página en memoria\n" );
 				pageTable[ vpn ].physicalPage = freeFrame;
 				pageTable[ vpn ].valid = true;
 
-				/*Se actualiza cual pagina fisica es refenciada por la vitual vpn*/
-				//IPT[ freeFrame ] = (pageTable[ vpn ]);
-				K[freeFrame] = &(pageTable[ vpn ]);
+				//Se actualiza la TLB invertida
+				//K[freeFrame] = &(pageTable[ vpn ]);
 
-				// Se hace efectivo el cambio en la TLB
-				machine->tlb[ indexFIFO ].virtualPage = vpn;
-				machine->tlb[ indexFIFO ].physicalPage = freeFrame;
-				machine->tlb[ indexFIFO ].valid = true;
-				DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-				++indexFIFO;
-				indexFIFO = indexFIFO % TLBSize;
+				//Se debe actualizar el TLB
+				updateTLBSC(vpn);
 
 			}else{
-				DEBUG('v', "\t\t\tUps! No hay más memoria, es momento de enviar a una victima al swap\n" );
-				/*********************************************************/
-				int swapPage = writeIntoSwap( indexSWAPFIFO );
-				DEBUG('v', "\t\t\tVictima del SWAP por ahora es FIFO. Esta página física se va: %d\n", indexSWAPFIFO );
-				if ( swapPage == -1 )
-				{
-					DEBUG('v', "\t\t\tSWAP INSUFICIENTE\n");
-					ASSERT(false);
-				}else
-				{
-					DEBUG('v', "\t\t\tPero no conozco cuál hilo tiene la página física #<<%d>>. Reviso tabla de invertidas\n", indexSWAPFIFO );
-					//if ( IPT[indexSWAPFIFO].dirty )
-					if ( K[indexSWAPFIFO]->dirty )
-					{
-						DEBUG('v', "\t\t\tLuego de revisar me doy cuenta que sí esta sucia.\n" );
-						ASSERT(false);
-					}else
-					{
-						//showPageTableState();
-						DEBUG('v', "\t\t\tLuego de revisar me doy cuenta que NO esta sucia.\n" );
-						DEBUG('v', "\t\t\tNo hay necesidad de enviar al SWAP. Solo se actualiza que ya no está en memoria\n" );
-						//IPT[indexSWAPFIFO].valid = false;
-						//IPT[indexSWAPFIFO].physicalPage = -1;
-						K[indexSWAPFIFO]->valid = false;
-						K[indexSWAPFIFO]->physicalPage = -1;
-						//showPageTableState();
-
-						DEBUG('v', "\t\t\tY se le otorga está la pagina %d a quien la ocupe\n", indexSWAPFIFO );
-						DEBUG('v', "\t\t\tY se libera el MemBitMap[%d]\n", indexSWAPFIFO);
-						MemBitMap->Clear( indexSWAPFIFO );
-
-						DEBUG('v', "\t\t\tSe le otorga la página en memoria que ocupa el proceso\n");
-						freeFrame = MemBitMap->Find();
-						pageTable[ vpn ].physicalPage = freeFrame;
-						pageTable[ vpn ].valid = true;
-
-						DEBUG('v', "\t\t\tSe actualiza el TLB[%d] y IPT[%d]\n",indexFIFO,freeFrame);
-						//IPT[ indexSWAPFIFO ] = (pageTable[ vpn ]);
-						K[ indexSWAPFIFO ] = &(pageTable[ vpn ]);
-
-						/* Se hace efectivo el cambio en la TLB*/
-						machine->tlb[ indexFIFO ].virtualPage = vpn;
-						machine->tlb[ indexFIFO ].physicalPage = freeFrame;
-						machine->tlb[ indexFIFO ].valid = true;
-						DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-						++indexFIFO;
-						indexFIFO = indexFIFO % TLBSize;
-					}
-					/*Siguiente en ser reemplzada será FIFO*/
-					++indexSWAPFIFO;
-					indexSWAPFIFO = indexSWAPFIFO % NumPhysPages;
-				}
-				/*********************************************************/
-				//ASSERT(false);
+				//Se debe selecionar una victima para enviar al SWAP
+				ASSERT(false);
 			}
 		}
 		else{
 			printf("%s\n", "Algo muy malo paso, el numero de pagina invalido!\n");
 			ASSERT(false);
 		}
-		// se cierra el Archivo
+		// Se cierra el Archivo
 		delete executable;
 	}
 	//Si la pagina no es valida y esta sucia.
@@ -594,32 +497,14 @@ void AddrSpace::load(unsigned int vpn )
 	}
 	//Si la pagina es valida y no esta sucia.
 	else if(pageTable[vpn].valid && !pageTable[vpn].dirty){
-		DEBUG('v', "\t3- Pagina valida y limpia.\n\tSe trae de memoria\n");
-		// Se hace efectivo el cambio en la TLB
-		machine->tlb[ indexFIFO ].virtualPage = vpn;
-		DEBUG('v',"\t\tPagina fisica a traer: <<%d>>\n",pageTable[vpn].physicalPage);
-		machine->tlb[ indexFIFO ].physicalPage = pageTable[vpn].physicalPage;
-		machine->tlb[ indexFIFO ].valid = true;
-		machine->tlb[ indexFIFO ].dirty = false;
-		DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-		++indexFIFO;
-		indexFIFO = indexFIFO % TLBSize;
-		//ASSERT(false);
+		DEBUG('v', "\t3- Pagina valida y limpia\n");
 		//La pagina ya esta en memoria por lo que solamente debo actualizar el TLB.
+		updateTLBSC(vpn);
 	}
 	//Si la pagina es valida y esta sucia.
 	else{
-		DEBUG('v', "\t4- Pagina valida = %d y sucia = %d\n", pageTable[vpn].valid, pageTable[vpn].dirty);
-		DEBUG('v', "\t4- Pagina valida = %d y limpia = %d\n", pageTable[vpn].valid, pageTable[vpn].dirty);
-		// Se hace efectivo el cambio en la TLB
-		machine->tlb[ indexFIFO ].virtualPage = vpn;
-		machine->tlb[ indexFIFO ].physicalPage = pageTable[vpn].physicalPage;
-		machine->tlb[ indexFIFO ].valid = true;
-		machine->tlb[ indexFIFO ].dirty = true;
-		DEBUG('v',"Uso campo en TLB: %d\n", indexFIFO );
-		++indexFIFO;
-		indexFIFO = indexFIFO % TLBSize;
-		//ASSERT(false);
+		DEBUG('v', "\t4- Pagina valida y sucia\n");
 		//La pagina ya esta en memoria por lo que solamente debo actualizar el TLB.
+		updateTLBSC(vpn);
 	}
 }

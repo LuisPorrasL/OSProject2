@@ -52,6 +52,7 @@ private:
   void showPageTableState();
   int writeIntoSwap( int physicalPageVictim );
   void readFromSwap( int swapPage, int physicalPage );
+  void updateTLBSC(unsigned int vpn);
   // for now!
   // address space
 public:
