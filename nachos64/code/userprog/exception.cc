@@ -632,11 +632,11 @@ void ExceptionHandler(ExceptionType which)
     }
     break;
     case PageFaultException:
-        DEBUG('v', "\nPageFaultException\n");
+        DEBUG('w', "\nPageFaultException\n");
         vpn = (machine->ReadRegister ( 39 ));
-        DEBUG('v', "Direccion logica: %d\n", vpn);
+        DEBUG('w', "Direccion logica: %d\n", vpn);
         vpn /= PageSize;
-        DEBUG('v', "Pagina que falla: %d\n", vpn);
+        DEBUG('w', "Pagina que falla: %d\n", vpn);
         currentThread->space->load(vpn);
     break;
     case ReadOnlyException:

@@ -200,6 +200,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
     unsigned int vpn, offset;
     TranslationEntry *entry;
     unsigned int pageFrame;
+		DEBUG('z', "Translate: Pagina virtual = %d, Direccion = %d\n", virtAddr/PageSize, virtAddr);
 
     DEBUG('a', "\tTranslate 0x%x, %s: ", virtAddr, writing ? "write" : "read");
 
