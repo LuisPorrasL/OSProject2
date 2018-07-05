@@ -20,9 +20,9 @@ NachosOpenFilesTable::NachosOpenFilesTable()
 NachosOpenFilesTable::~NachosOpenFilesTable()
 {
 	if(usage <= 0){
+			printf("Ultimo hilo borra tabla de archivos\n");
 			delete[] openFiles;
 			delete openFilesMap;
-			printf("Ultimo hilo borra tabla de archivos\n");
 	}
 }
 

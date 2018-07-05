@@ -36,8 +36,8 @@ extern BitMap* MemBitMap;
 extern BitMap* SWAPBitMap;
 extern int indexFIFO;
 extern int indexSWAPFIFO;
-extern TranslationEntry* IPT;
-extern TranslationEntry* K[NumPhysPages];
+extern int pageFaultsCounter;
+extern TranslationEntry* IPT[NumPhysPages];
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB

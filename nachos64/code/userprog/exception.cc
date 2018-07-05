@@ -315,15 +315,19 @@ void Nachos_Fork()
   // We need to create a new kernel thread to execute the user thread
   Thread * newT = new Thread( "child to execute Fork code" );
 
-  delete  newT->mySems;
-  newT->mySems = currentThread->mySems;
-  newT->mySems->addSem();
-
-
-  // We need to share the Open File Table structure with this new child
-  delete  newT->mytable;
-  newT->mytable = currentThread->mytable;
-  newT->mytable->addThread();
+  try
+  {
+    delete  newT->mySems;
+    newT->mySems = currentThread->mySems;
+    newT->mySems->addSem();
+    // We need to share the Open File Table structure with this new child
+    delete  newT->mytable;
+    newT->mytable = currentThread->mytable;
+    newT->mytable->addThread();
+  }catch(...)
+  {
+    printf("Nachos_Fork::Error al borrar punteros\n");
+  }
 
   // Child and father will also share the same address space, except for the stack
   // Text, init data and uninit data are shared, a new stack area must be created
@@ -506,7 +510,6 @@ void Nachos_Exec(){
   char name[256] = {0}; // need to store file name to unix create sc
   int c, i; // counter
   i = 0;
-
   do
   {
     machine->SafeReadMem( r4 , 1 , &c ); // read from nachos mem
@@ -542,7 +545,6 @@ void Nachos_Join()
   * Return the exit status.
   */
   //int Join(SpaceId id);
-
   DEBUG( 't', "Entering JOIN System call\n" );
 
   //First I need to read the SpaceID of the thread I must wait for
@@ -632,12 +634,14 @@ void ExceptionHandler(ExceptionType which)
     }
     break;
     case PageFaultException:
-        DEBUG('w', "\nPageFaultException\n");
+        DEBUG('v', "\nPageFaultException\n");
         vpn = (machine->ReadRegister ( 39 ));
-        DEBUG('w', "Direccion logica: %d\n", vpn);
+        DEBUG('v', "Direccion logica: %d\n", vpn);
         vpn /= PageSize;
-        DEBUG('w', "Pagina que falla: %d\n", vpn);
+        DEBUG('v', "Pagina que falla: %d\n", vpn);
         currentThread->space->load(vpn);
+        ++pageFaultsCounter;
+        DEBUG('t',"Cantidad de pagefaults: %d\n",pageFaultsCounter);
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");

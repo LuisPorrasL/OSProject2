@@ -54,6 +54,10 @@ private:
   void readFromSwap( int swapPage, int physicalPage );
   void updateTLBSC(unsigned int vpn);
   void updateTLBFIFO(unsigned int vpn);
+  void validateSWAPCaseFIFO();
+  void takeFromSWAPToMem( unsigned int vpn );
+  void clearPhysicalPage( int physicalPage );
+
   // for now!
   // address space
 public:

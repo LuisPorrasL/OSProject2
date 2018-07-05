@@ -36,10 +36,10 @@ SynchDisk   *synchDisk;
 Machine *machine;
 BitMap* MemBitMap;	// user program memory and registers
 BitMap* SWAPBitMap;
-TranslationEntry* IPT;
-TranslationEntry* K[NumPhysPages];
+TranslationEntry* IPT[NumPhysPages];
 int indexFIFO;
 int indexSWAPFIFO;
+int pageFaultsCounter;
 #endif
 
 #ifdef NETWORK
@@ -92,9 +92,9 @@ Initialize(int argc, char **argv)
 {
     MemBitMap =  new BitMap( NumPhysPages );
 		SWAPBitMap =  new BitMap( NumPhysPages*2 );
-    IPT = new TranslationEntry[ NumPhysPages ];
 		indexFIFO = 0;
     indexSWAPFIFO = 0;
+    pageFaultsCounter = 0;
     int argCount;
     const char* debugArgs = "";
     bool randomYield = false;
