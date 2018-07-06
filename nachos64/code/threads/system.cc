@@ -91,7 +91,7 @@ void
 Initialize(int argc, char **argv)
 {
     MemBitMap =  new BitMap( NumPhysPages );
-		SWAPBitMap =  new BitMap( NumPhysPages*2 );
+		SWAPBitMap =  new BitMap((NumPhysPages*2>64)?(NumPhysPages*2):64);
 		indexFIFO = 0;
     indexSWAPFIFO = 0;
     pageFaultsCounter = 0;
