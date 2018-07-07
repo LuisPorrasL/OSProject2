@@ -323,7 +323,7 @@ void AddrSpace::showIPTState()
 	for (unsigned int x = 0; x < NumPhysPages; ++x)
 	{
 		if( IPT[x] != NULL)
-			DEBUG('v',"PhysicalPage = %d, VirtualPage = %d \n", IPT[x]->physicalPage, IPT[x]->virtualPage );
+		DEBUG('v',"PhysicalPage = %d, VirtualPage = %d, Valid = %d, Dirty = %d \n", IPT[x]->physicalPage, IPT[x]->virtualPage, IPT[x]->valid, IPT[x]->dirty );
 	}
 }
 
@@ -373,8 +373,8 @@ void AddrSpace::writeIntoSwap( int physicalPageVictim ){
 	int swapPage = SWAPBitMap->Find();
 	if ( swapPage == -1 )
 	{
-			printf("%s\n", "Error(writeIntoSwap): Espacio en SWAP NO disponible\n");
-			ASSERT(swapPage == -1);
+		printf("%s\n", "Error(writeIntoSwap): Espacio en SWAP NO disponible\n");
+		ASSERT( false );
 	}
 	OpenFile *swapFile = fileSystem->Open( SWAPFILENAME );
 	if( swapFile == NULL ){
@@ -384,8 +384,8 @@ void AddrSpace::writeIntoSwap( int physicalPageVictim ){
 	IPT[physicalPageVictim]->valid = false;
 	IPT[physicalPageVictim]->physicalPage = swapPage;
 	swapFile->WriteAt((&machine->mainMemory[physicalPageVictim*PageSize]),PageSize, swapPage*PageSize);
-	MemBitMap->Clear(indexSWAPFIFO);
-	clearPhysicalPage(indexSWAPFIFO);
+	MemBitMap->Clear( indexSWAPFIFO );
+	clearPhysicalPage( indexSWAPFIFO );
 	delete swapFile;
 }
 
@@ -422,7 +422,7 @@ void AddrSpace::movePageToSwapFIFO(){
 //VM
 void AddrSpace::load(unsigned int vpn)
 {
-	int freeFrame;
+	int freeFrame;		
 	DEBUG('v', "Numero de paginas: %d, hilo actual: %s\n", numPages, currentThread->getName());
 	DEBUG('v', "\tCodigo va de [%d, %d[ \n", 0, initData);
 	DEBUG('v',"\tDatos incializados va de [%d, %d[ \n", initData, noInitData);
@@ -466,7 +466,105 @@ void AddrSpace::load(unsigned int vpn)
 				//updateTLBSC(vpn);
 			}else
 			{		//victima swap
-					ASSERT(false);
+				int tlbIndexForNewPage = -1;
+				for ( int index = 0; index < TLBSize; ++index )
+				{
+
+					//ASSERT( machine->tlb[ index ].valid );
+					if ( machine->tlb[ index ].valid && machine->tlb[ index ].physicalPage == IPT[indexSWAPFIFO]->physicalPage  )
+					{
+						printf("%s\n", "\t\t\tSí estaba la victima en TLB" );
+						machine->tlb[ index ].valid = false;
+						IPT[indexSWAPFIFO]->use = machine->tlb[ index ].use;
+						IPT[indexSWAPFIFO]->dirty = machine->tlb[ index ].dirty;
+						tlbIndexForNewPage = index;
+						break;
+					}
+				}
+
+				if ( IPT[indexSWAPFIFO]->dirty )
+				{
+					printf("\t\t\tVictima f=%d,l=%d y  sucia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+					writeIntoSwap( IPT[indexSWAPFIFO]->physicalPage );
+
+					// pedir el nuevo freeFrame
+					freeFrame = MemBitMap->Find();
+					// verificar que sea distinto de -1
+					if ( -1 == freeFrame )
+					{
+						printf("Invalid free frame %d\n", freeFrame );
+						ASSERT( false );
+					}
+					// actualizar la pagina física para la nueva virtual vpn
+					pageTable[ vpn ].physicalPage = freeFrame;
+					//  cargar el código a la memoria
+					++stats->numPageFaults;
+					executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
+					PageSize, noffH.code.inFileAddr + PageSize*vpn );
+					// actualizar la validez
+					pageTable[ vpn ].valid = true;
+					// actualizar la tabla de paginas invertidas
+					IPT[ freeFrame ] = &( pageTable[ vpn ] );
+
+					// finalmente, actualizar tlb
+					if ( tlbIndexForNewPage == -1 )
+					{
+						printf("NO COPIO en el tlb de la victima la nueva\n" );
+						updateTLBFIFO( vpn );
+					}else
+					{
+						printf("1.1 - Copio en el tlb de la victima a la nueva\n" );
+						machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+						machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+						machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+						machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+						machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+						machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+					}
+					//ASSERT(false);
+				}else
+				{
+					printf("\t\t\tVictima f=%d,l=%d y limpia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+					int oldPhysicalPage = IPT[indexSWAPFIFO]->physicalPage;
+					IPT[indexSWAPFIFO]->valid = false;
+					IPT[indexSWAPFIFO]->physicalPage = -1;
+					MemBitMap->Clear( oldPhysicalPage );
+					clearPhysicalPage( oldPhysicalPage );
+
+					// cargamos pargina nueva en memoria
+					freeFrame = MemBitMap->Find();
+
+					if ( freeFrame == -1 )
+					{
+						printf("Invalid free frame %d\n", freeFrame );
+						ASSERT( false );
+					}
+
+					++stats->numPageFaults;
+					pageTable[ vpn ].physicalPage = freeFrame;
+					executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
+					PageSize, noffH.code.inFileAddr + PageSize*vpn );
+					pageTable[ vpn ].valid = true;
+
+					IPT[ freeFrame ] = &(pageTable [ vpn ]);
+					if ( tlbIndexForNewPage == -1 )
+					{
+						printf("NO COPIO en el tlb de la victima la nueva\n" );
+						updateTLBFIFO( vpn );
+					}else
+					{
+						printf("Copio en el tlb de la victima la nueva\n" );
+						machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+						machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+						machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+						machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+						machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+						machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+					}
+
+				}
+				indexSWAPFIFO = ( indexSWAPFIFO +1 )%NumPhysPages;
+				//ASSERT(false);
 			}
 		}
 		else if(vpn >= initData && vpn < noInitData){ //segmento de Datos Inicializados.
@@ -514,8 +612,101 @@ void AddrSpace::load(unsigned int vpn)
 				//updateTLBSC(vpn);
 
 			}else{
-					// usar swap
-					ASSERT(false);
+				// usar swap
+				/// revisamos si la victima está en TLB
+				int tlbIndexForNewPage = -1;
+				for ( int index = 0; index < TLBSize; ++index )
+				{
+					//ASSERT( machine->tlb[ index ].valid );
+					if ( machine->tlb[ index ].valid && machine->tlb[ index ].physicalPage == IPT[indexSWAPFIFO]->physicalPage  )
+					{
+						printf("%s\n", "\t\t\tSí estaba la victima en TLB" );
+						machine->tlb[ index ].valid = false;
+						IPT[indexSWAPFIFO]->use = machine->tlb[ index ].use;
+						IPT[indexSWAPFIFO]->dirty = machine->tlb[ index ].dirty;
+						tlbIndexForNewPage = index;
+						break;
+					}
+				}
+
+				// revisamos con la información actualizada a la victima
+				if ( IPT[indexSWAPFIFO]->dirty )
+				{
+					printf("\t\t\tVictima f=%d,l=%d sucia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+					writeIntoSwap( IPT[indexSWAPFIFO]->physicalPage );
+
+					// pedir el nuevo freeFrame
+					freeFrame = MemBitMap->Find();
+
+					// verificar que sea distinto de -1
+					if ( -1 == freeFrame )
+					{
+						printf("Invalid free frame %d\n", freeFrame );
+						ASSERT( false );
+					}
+
+					// actualizar la pagina física para la nueva virtual vpn
+					pageTable [ vpn ].physicalPage = freeFrame;
+					pageTable [ vpn ].valid = true;
+
+					//actualizo invertida
+					IPT[ freeFrame ] = &(pageTable [ vpn ]);
+
+					//actualizo el tlb
+					if ( tlbIndexForNewPage == -1 )
+					{
+						printf("NO COPIO en el tlb de la victima la nueva\n" );
+						updateTLBFIFO( vpn );
+					}else
+					{
+						printf("Copio en el tlb de la victima la nueva\n" );
+						machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+						machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+						machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+						machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+						machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+						machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+					}
+					//ASSERT(false);
+				}else
+				{
+					printf("\t\t\tVictima f=%d,l=%d limpia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+					int oldPhysicalPage = IPT[indexSWAPFIFO]->physicalPage;
+					IPT[indexSWAPFIFO]->valid = false;
+					IPT[indexSWAPFIFO]->physicalPage = -1;
+					MemBitMap->Clear( oldPhysicalPage );
+					clearPhysicalPage( oldPhysicalPage );
+
+					// cargamos pargina nueva en memoria
+					freeFrame = MemBitMap->Find();
+
+					if ( freeFrame == -1 )
+					{
+						printf("Invalid free frame %d\n", freeFrame );
+						ASSERT( false );
+					}
+					pageTable [ vpn ].physicalPage = freeFrame;
+					pageTable [ vpn ].valid = true;
+
+					IPT[ freeFrame ] = &(pageTable [ vpn ]);
+
+					if ( tlbIndexForNewPage == -1 )
+					{
+						printf("NO COPIO en el tlb de la victima la nueva\n" );
+						updateTLBFIFO( vpn );
+					}else
+					{
+						printf("Copio en el tlb de la victima la nueva\n" );
+						machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+						machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+						machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+						machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+						machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+						machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+					}
+				}
+				indexSWAPFIFO = ( indexSWAPFIFO +1 )%NumPhysPages;
+				//ASSERT(false);
 			}
 		}
 		else{
@@ -529,18 +720,132 @@ void AddrSpace::load(unsigned int vpn)
 	else if(!pageTable[vpn].valid && pageTable[vpn].dirty){
 		//Debo traer la pagina del area de SWAP.
 		DEBUG('v', "\t2- Pagina invalida y sucia\n");
+		DEBUG('v', "\t\tPagina física: %d\n", pageTable[vpn].physicalPage );
 		SWAPBitMap->Clear(pageTable[vpn].physicalPage);
 		freeFrame = MemBitMap->Find();
-
 		if(freeFrame != -1)
 		{ //Si hay especio en memoria
+			printf("%s\n", "Si hay espacio en memoria, solo leemos de SWAP\n" );
 
+			//actualizar su pagina física de la que leo del swap
+			int oldSwapPageAddr = pageTable [ vpn ].physicalPage;
+			pageTable [ vpn ].physicalPage = freeFrame;
+
+			// cargarla
+			readFromSwap( freeFrame, oldSwapPageAddr );
+
+			// actualizar tambien su validez
+			pageTable [ vpn ].valid = true;
+
+			// actualiza tabla de paginas invertidas
+			IPT[ freeFrame ] = &(pageTable [ vpn ]);
+
+			//actualizar su posición en la tlb
+			updateTLBFIFO( vpn );
+			//ASSERT(false);
 		}
 		else
 		{
 			//Se debe selecionar una victima para enviar al SWAP
-			ASSERT(false);
+			printf("\n%s\n", "NO hay memoria, es más complejo.\n" );
+
+			int tlbIndexForNewPage = -1;
+			for ( int index = 0; index < TLBSize; ++index )
+			{
+				//ASSERT( machine->tlb[ index ].valid );
+				if ( machine->tlb[ index ].valid && machine->tlb[ index ].physicalPage == IPT[indexSWAPFIFO]->physicalPage  )
+				{
+					printf("%s\n", "\t\t\tSí estaba la victima en TLB" );
+					machine->tlb[ index ].valid = false;
+					IPT[indexSWAPFIFO]->use = machine->tlb[ index ].use;
+					IPT[indexSWAPFIFO]->dirty = machine->tlb[ index ].dirty;
+					tlbIndexForNewPage = index;
+					break;
+				}
+			}
+
+			if ( IPT[indexSWAPFIFO]->dirty )
+			{
+				printf("\t\t\tVictima f=%d,l=%d sucia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+				writeIntoSwap( IPT[indexSWAPFIFO]->physicalPage );
+				// pido el freeFrame
+				freeFrame = MemBitMap->Find();
+				if ( freeFrame == -1 )
+				{
+					printf("Invalid free frame %d\n", freeFrame );
+					ASSERT( false );
+				}
+
+				int oldSwapPageAddr = pageTable [ vpn ].physicalPage;
+				pageTable [ vpn ].physicalPage = freeFrame;
+
+				// cargamos la pagina que desea desde el SWAP
+				readFromSwap( freeFrame, oldSwapPageAddr );
+				pageTable [ vpn ].valid = true;
+
+				IPT[ freeFrame ] = &(pageTable [ vpn ]);
+
+				// finalmente actualizacom tlb
+				if ( tlbIndexForNewPage == -1 )
+				{
+					printf("NO COPIO en el tlb de la victima la nueva\n" );
+					updateTLBFIFO( vpn );
+				}else
+				{
+					printf("2-Copio en el tlb de la victima la nueva\n" );
+					machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+					machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+					machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+					machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+					machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+					machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+				}
+				//ASSERT(false);
+			}else
+			{
+				printf("\t\t\tVictima f=%d,l=%d limpia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+				int oldPhysicalPage = IPT[indexSWAPFIFO]->physicalPage;
+				IPT[indexSWAPFIFO]->valid = false;
+				IPT[indexSWAPFIFO]->physicalPage = -1;
+				MemBitMap->Clear( oldPhysicalPage );
+				clearPhysicalPage( oldPhysicalPage );
+
+				freeFrame = MemBitMap->Find();
+
+				if ( freeFrame == -1 )
+				{
+					printf("Invalid free frame %d\n", freeFrame );
+					ASSERT( false );
+				}
+				int oldSwapPageAddr = pageTable [ vpn ].physicalPage;
+				pageTable [ vpn ].physicalPage = freeFrame;
+
+				// cargamos la pagina que desea desde el SWAP
+				readFromSwap( freeFrame, oldSwapPageAddr );
+
+				pageTable [ vpn ].valid = true;
+
+				IPT[ freeFrame ] = &(pageTable [ vpn ]);
+
+				// finalmente actualizacom tlb
+				if ( tlbIndexForNewPage == -1 )
+				{
+					printf("NO COPIO en el tlb de la victima la nueva\n" );
+					updateTLBFIFO( vpn );
+				}else
+				{
+					printf("2-Copio en el tlb de la victima la nueva\n" );
+					machine->tlb[tlbIndexForNewPage].virtualPage =  pageTable[vpn].virtualPage;
+					machine->tlb[tlbIndexForNewPage].physicalPage = pageTable[vpn].physicalPage;
+					machine->tlb[tlbIndexForNewPage].valid = pageTable[vpn].valid;
+					machine->tlb[tlbIndexForNewPage].use = pageTable[vpn].use;
+					machine->tlb[tlbIndexForNewPage].dirty = pageTable[vpn].dirty;
+					machine->tlb[tlbIndexForNewPage].readOnly = pageTable[vpn].readOnly;
+				}
+			}
+			indexSWAPFIFO = ( indexSWAPFIFO +1 )%NumPhysPages;
 		}
+		//ASSERT(false);
 	}
 	//Si la pagina es valida y no esta sucia.
 	else if(pageTable[vpn].valid && !pageTable[vpn].dirty){
