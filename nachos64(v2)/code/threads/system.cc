@@ -39,6 +39,7 @@ BitMap* SWAPBitMap;
 TranslationEntry* IPT[NumPhysPages];
 int indexTLBFIFO;
 int indexSWAPFIFO;
+bool threadFirstTime;
 #endif
 
 #ifdef NETWORK
@@ -93,6 +94,7 @@ Initialize(int argc, char **argv)
 		SWAPBitMap =  new BitMap( SWAPSize );
 		indexTLBFIFO = 0;
     indexSWAPFIFO = 0;
+    threadFirstTime = true;
     for (int index = 0; index < NumPhysPages; ++index)
     {
       IPT[index] = NULL;

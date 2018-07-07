@@ -37,6 +37,7 @@ extern BitMap* SWAPBitMap;
 extern int indexTLBFIFO;
 extern int indexSWAPFIFO;
 extern TranslationEntry* IPT[NumPhysPages];
+extern bool threadFirstTime;
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB
