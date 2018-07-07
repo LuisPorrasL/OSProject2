@@ -36,7 +36,6 @@ extern BitMap* MemBitMap;
 extern BitMap* SWAPBitMap;
 extern int indexTLBFIFO;
 extern int indexSWAPFIFO;
-extern int pageFaultsCounter;
 extern TranslationEntry* IPT[NumPhysPages];
 #endif
 

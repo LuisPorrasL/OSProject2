@@ -277,11 +277,6 @@ void AddrSpace::SaveState()
 	for (int i = 0; i < TLBSize; ++i)
 	{
 		machine->tlb[i].valid = false;
-		machine->tlb[i].use = false;
-		machine->tlb[i].dirty = false;
-		machine->tlb[i].virtualPage = -1;
-		machine->tlb[i].physicalPage = -1;
-		machine->tlb[i].readOnly = false;
 	}
 	#endif
 }
@@ -311,11 +306,6 @@ void AddrSpace::RestoreState()
 	for (int i = 0; i < TLBSize; ++i)
 	{
 		machine->tlb[i].valid = false;
-		machine->tlb[i].use = false;
-		machine->tlb[i].dirty = false;
-		machine->tlb[i].virtualPage = -1;
-		machine->tlb[i].physicalPage = -1;
-		machine->tlb[i].readOnly = false;
 	}
 	#endif
 }
@@ -332,7 +322,8 @@ void AddrSpace::showIPTState()
 {
 	for (unsigned int x = 0; x < NumPhysPages; ++x)
 	{
-		DEBUG('v',"PhysicalPage = %d, VirtualPage = %d \n", IPT[x]->physicalPage, IPT[x]->virtualPage );
+		if( IPT[x] != NULL)
+			DEBUG('v',"PhysicalPage = %d, VirtualPage = %d \n", IPT[x]->physicalPage, IPT[x]->virtualPage );
 	}
 }
 
@@ -357,9 +348,10 @@ void AddrSpace::showTLBState()
 	printf("\n");
 }
 
-void AddrSpace::updateTLBFIFO(unsigned int vpn)
+int AddrSpace::updateTLBFIFO(unsigned int vpn)
 {
 	//Debo guardar los cambios hechos en la TLB a la pagina que estoy sacando.
+	int returnIndex = 0;
 	pageTable[machine->tlb[indexTLBFIFO].virtualPage].use = machine->tlb[indexTLBFIFO].use;
 	pageTable[machine->tlb[indexTLBFIFO].virtualPage].dirty = machine->tlb[indexTLBFIFO].dirty;
 	//Actualizo el TLB
@@ -371,16 +363,21 @@ void AddrSpace::updateTLBFIFO(unsigned int vpn)
 	machine->tlb[indexTLBFIFO].dirty = pageTable[vpn].dirty;
 	machine->tlb[indexTLBFIFO].readOnly = pageTable[vpn].readOnly;
 	DEBUG('v', "\tPagina del TLB asignada %d\n\n", (indexTLBFIFO)%TLBSize);
-
+	returnIndex = indexTLBFIFO;
 	indexTLBFIFO = (indexTLBFIFO + 1)%TLBSize;
+	return returnIndex;
 	//showTLBState();
 }
 
 void AddrSpace::writeIntoSwap( int physicalPageVictim ){
 	int swapPage = SWAPBitMap->Find();
-	ASSERT(swapPage == -1);
-	OpenFile *swapFile = fileSystem->Open(SWAPFILENAME);
-	if(swapFile == NULL){
+	if ( swapPage == -1 )
+	{
+			printf("%s\n", "Error(writeIntoSwap): Espacio en SWAP NO disponible\n");
+			ASSERT(swapPage == -1);
+	}
+	OpenFile *swapFile = fileSystem->Open( SWAPFILENAME );
+	if( swapFile == NULL ){
 		printf("%s\n", "Error(writeIntoSwap): No se pudo habir el archivo de SWAP");
 		ASSERT(false);
 	}
@@ -394,27 +391,32 @@ void AddrSpace::writeIntoSwap( int physicalPageVictim ){
 
 void AddrSpace::readFromSwap( int physicalPage , int swapPage ){
 	OpenFile *swapFile = fileSystem->Open(SWAPFILENAME);
+	ASSERT( swapPage >=0 && swapPage < SWAPSize );
 	if(swapFile == NULL){
 		printf("%s\n", "Error(writeIntoSwap): No se pudo habir el archivo de SWAP");
 		ASSERT(false);
 	}
 
-	swapFile->ReadAt((&machine->mainMemory[swapPage*PageSize]), PageSize, physicalPage*PageSize);
+	swapFile->ReadAt((&machine->mainMemory[physicalPage*PageSize]), PageSize, swapPage*PageSize);
 
 	delete swapFile;
 }
 
-void AddrSpace::movePageToSwapFIFO(unsigned int vpn){
+void AddrSpace::movePageToSwapFIFO(){
+	DEBUG('v',"\t\t\tVictima swap %d\n",indexSWAPFIFO);
 	if(IPT[indexSWAPFIFO]->dirty){	//Tengo que mover la pagina victima de memoria al SWAP
+		DEBUG('v',"\t\t\tSucia %d\n",indexSWAPFIFO);
 		writeIntoSwap(indexSWAPFIFO);
 	}
 	else{	//Simplemente elimino la pagina victima de memoria
+		DEBUG('v',"\t\t\tLimpia\n");
 		IPT[indexSWAPFIFO]->valid = false;
 		IPT[indexSWAPFIFO]->physicalPage = -1;
 		MemBitMap->Clear(indexSWAPFIFO);
 		clearPhysicalPage(indexSWAPFIFO);
 	}
-	indexSWAPFIFO = (indexSWAPFIFO+1)%SWAPSize;
+	++indexSWAPFIFO;
+	indexSWAPFIFO = indexSWAPFIFO % NumPhysPages;
 }
 
 //VM
@@ -450,6 +452,7 @@ void AddrSpace::load(unsigned int vpn)
 			if ( freeFrame != -1  )
 			{
 				DEBUG('v',"\tFrame libre en memoria: %d\n", freeFrame );
+				++stats->numPageFaults;
 				pageTable[ vpn ].physicalPage = freeFrame;
 				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
 				PageSize, noffH.code.inFileAddr + PageSize*vpn );
@@ -462,21 +465,8 @@ void AddrSpace::load(unsigned int vpn)
 				updateTLBFIFO(vpn);
 				//updateTLBSC(vpn);
 			}else
-			{
-				//Se debe selecionar una victima para enviar al SWAP
-				movePageToSwapFIFO(vpn);
-				//Ahora que abrí un nuevo campo en memoria debo cargar la pagina requerida
-				freeFrame = MemBitMap->Find();
-				pageTable[ vpn ].physicalPage = freeFrame;
-				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
-				PageSize, noffH.code.inFileAddr + PageSize*vpn );
-				pageTable[ vpn ].valid = true;
-				//pageTable[ vpn ].readOnly = true;
-
-				//Se actualiza la TLB invertida
-				IPT[freeFrame] = &(pageTable[ vpn ]);
-				//Se debe actualizar el TLB
-				updateTLBFIFO(vpn);
+			{		//victima swap
+					ASSERT(false);
 			}
 		}
 		else if(vpn >= initData && vpn < noInitData){ //segmento de Datos Inicializados.
@@ -487,6 +477,7 @@ void AddrSpace::load(unsigned int vpn)
 			if ( freeFrame != -1  )
 			{
 				DEBUG('v',"Frame libre en memoria: %d\n", freeFrame );
+				++stats->numPageFaults;
 				pageTable[ vpn ].physicalPage = freeFrame;
 				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
 				PageSize, noffH.code.inFileAddr + PageSize*vpn );
@@ -500,23 +491,12 @@ void AddrSpace::load(unsigned int vpn)
 			}else
 			{
 				//Se debe selecionar una victima para enviar al SWAP
-				movePageToSwapFIFO(vpn);
-
-				freeFrame = MemBitMap->Find();
-
-				pageTable[ vpn ].physicalPage = freeFrame;
-				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
-				PageSize, noffH.code.inFileAddr + PageSize*vpn );
-				pageTable[ vpn ].valid = true;
-
-				//Se actualiza la TLB invertida
-				IPT[freeFrame] = &(pageTable[ vpn ]);
-				//Se debe actualizar el TLB
-				updateTLBFIFO(vpn);
+				ASSERT(false);
 			}
 		}
 		else if(vpn >= noInitData && vpn < numPages){ //segemento de Datos No Inicializados o segmento de Pila.
 			DEBUG('v',"\t1.3 Página de datos no Inicializado o página de pila\n");
+			++stats->numPageFaults;
 			freeFrame = MemBitMap->Find();
 			DEBUG('v',"\t\t\tSe busca una nueva página para otorgar\n" );
 			if ( freeFrame != -1 )
@@ -534,19 +514,8 @@ void AddrSpace::load(unsigned int vpn)
 				//updateTLBSC(vpn);
 
 			}else{
-				//Se debe selecionar una victima para enviar al SWAP
-				movePageToSwapFIFO(vpn);
-
-				freeFrame = MemBitMap->Find();
-
-				pageTable[ vpn ].physicalPage = freeFrame;
-				pageTable[ vpn ].valid = true;
-				//Se actualiza la TLB invertida
-				clearPhysicalPage(freeFrame);
-				IPT[freeFrame] = &(pageTable[ vpn ]);
-
-				//Se debe actualizar el TLB
-				updateTLBFIFO(vpn);
+					// usar swap
+					ASSERT(false);
 			}
 		}
 		else{
@@ -563,31 +532,15 @@ void AddrSpace::load(unsigned int vpn)
 		SWAPBitMap->Clear(pageTable[vpn].physicalPage);
 		freeFrame = MemBitMap->Find();
 
-		if(freeFrame != -1){ //Si hay especio en memoria
-			//Cargo la pagina del archivo SWAP a memoria
-			readFromSwap(freeFrame, pageTable[vpn].physicalPage);
-			pageTable[vpn].physicalPage = freeFrame;
-			pageTable[vpn].valid = true;
+		if(freeFrame != -1)
+		{ //Si hay especio en memoria
 
-			//Se actualiza la TLB invertida
-			clearPhysicalPage(freeFrame);
-			IPT[freeFrame] = &(pageTable[ vpn ]);
 		}
-		else{
+		else
+		{
 			//Se debe selecionar una victima para enviar al SWAP
-			movePageToSwapFIFO(vpn);
-
-			freeFrame = MemBitMap->Find();
-			//Cargo la pagina del archivo SWAP a memoria
-			readFromSwap(freeFrame, pageTable[vpn].physicalPage);
-			pageTable[vpn].physicalPage = freeFrame;
-			pageTable[vpn].valid = true;
-
-			//Se actualiza la TLB invertida
-			clearPhysicalPage(freeFrame);
-			IPT[freeFrame] = &(pageTable[ vpn ]);
+			ASSERT(false);
 		}
-		//ASSERT(false);
 	}
 	//Si la pagina es valida y no esta sucia.
 	else if(pageTable[vpn].valid && !pageTable[vpn].dirty){
@@ -600,5 +553,6 @@ void AddrSpace::load(unsigned int vpn)
 		DEBUG('v', "\t4- Pagina valida y sucia\n");
 		//La pagina ya esta en memoria por lo que solamente debo actualizar el TLB.
 		updateTLBFIFO(vpn);
+		//ASSERT(false);
 	}
 }

@@ -39,7 +39,6 @@ BitMap* SWAPBitMap;
 TranslationEntry* IPT[NumPhysPages];
 int indexTLBFIFO;
 int indexSWAPFIFO;
-int pageFaultsCounter;
 #endif
 
 #ifdef NETWORK
@@ -91,10 +90,13 @@ void
 Initialize(int argc, char **argv)
 {
     MemBitMap =  new BitMap( NumPhysPages );
-		SWAPBitMap =  new BitMap(SWAPSize);
+		SWAPBitMap =  new BitMap( SWAPSize );
 		indexTLBFIFO = 0;
     indexSWAPFIFO = 0;
-    pageFaultsCounter = 0;
+    for (int index = 0; index < NumPhysPages; ++index)
+    {
+      IPT[index] = NULL;
+    }
     int argCount;
     const char* debugArgs = "";
     bool randomYield = false;

@@ -82,6 +82,10 @@ void Nachos_Halt() {                    // System call 0
 
 }// Nachos_Halt
 
+void dummy()
+{
+  return;
+}
 
 void Nachos_Open() {                    // System call 5
   /* System call definition described to user
@@ -439,6 +443,8 @@ BitMap* execFilesMap = new BitMap(128);
 void Nachos_Exit(){
   /* This user program is done (status = 0 means exited normally). */
   //void Exit(int status);
+  int exitValue = machine->ReadRegister(4);
+  printf("Exit with value: %d\n", exitValue  );
   Thread* nextThread;
   IntStatus oldLevel = interrupt->SetLevel(IntOff);
 
@@ -640,8 +646,6 @@ void ExceptionHandler(ExceptionType which)
         vpn /= PageSize;
         DEBUG('v', "Pagina que falla: %d\n", vpn);
         currentThread->space->load(vpn);
-        ++pageFaultsCounter;
-        DEBUG('t',"Cantidad de pagefaults: %d\n",pageFaultsCounter);
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");
