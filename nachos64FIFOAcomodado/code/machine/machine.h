@@ -36,6 +36,7 @@ const int NumPhysPages = 32;
 const int MemorySize = NumPhysPages * PageSize;
 const int TLBSize = 4;			// if there is a TLB, make it small
 const int SWAPSize = 64;//((NumPhysPages*2)>64)?(NumPhysPages*2):64;
+#define SWAPFILENAME "SWAP.txt"
 
 enum ExceptionType { NoException,           // Everything ok!
 		     SyscallException,      // A program executed a system call.

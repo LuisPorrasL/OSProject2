@@ -129,6 +129,7 @@ void Nachos_Read(){
   char bufferReader[size + 1] = {0}; // store unix result
   int readBytes = 0; // amount of read bytes
   int count = 0;
+  char t = '\n';
 
   // verify if file is one of standar output/input
   switch ( fileId ) {
@@ -139,18 +140,16 @@ void Nachos_Read(){
     printf("%s\n", "Error, can not read from standard error");
     break;
     case ConsoleInput:
-    //fgets( bufferReader, size , stdin );
-    /*readBytes =  read( ConsoleInput,
-    (void *)bufferReader, size );*/
 
     while (count < size )
     {
-      std::cin>> bufferReader[count];
+      t = getchar();
+      bufferReader[count] = t;
       ++count;
     }
 
-    bufferReader[ size + 1 ]= '\0';
     readBytes = strlen( bufferReader );
+    stats->numConsoleCharsRead+=readBytes;
     // write into Nachos mem
     for (int index = 0; index < readBytes; ++  index )
     {
@@ -216,6 +215,7 @@ switch (id) {
   break;
   case  ConsoleOutput:
   printf( "%s", buffer );
+  stats->numConsoleCharsWritten+= strlen(buffer);
   break;
   case ConsoleError:	// This trick permits to write integers to console
   printf( "%d\n", machine->ReadRegister( 4 ) );

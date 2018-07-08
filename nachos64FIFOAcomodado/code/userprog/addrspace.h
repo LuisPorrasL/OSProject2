@@ -18,7 +18,6 @@
 #include <string>
 
 #define UserStackSize		1024 	// increase this as necessary!
-#define SWAPFILENAME "SWAP.txt"
 
 class AddrSpace {
 public:
@@ -57,7 +56,8 @@ private:
   void validateSWAPCaseFIFO();
   void takeFromSWAPToMem( unsigned int vpn );
   void clearPhysicalPage( int physicalPage );
-  void movePageToSwapFIFO();
+  void useVictimTLBSpace(int tlbIndex, int vpn );
+  int  findVictimInTLB( int indexSWAP );
 
   // for now!
   // address space
