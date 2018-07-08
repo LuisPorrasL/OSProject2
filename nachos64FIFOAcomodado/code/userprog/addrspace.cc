@@ -502,6 +502,7 @@ void AddrSpace::load(unsigned int vpn)
 					}else
 					{
 						DEBUG('v',"1.1 - Copio en el tlb de la victima a la nueva\n" );
+						useVictimTLBSpace( tlbIndexForNewPage, vpn );
 					}
 					//ASSERT(false);
 				}else
@@ -598,6 +599,7 @@ void AddrSpace::load(unsigned int vpn)
 						}else
 						{
 							DEBUG('v',"1.1 - Copio en el tlb de la victima a la nueva\n" );
+							useVictimTLBSpace( tlbIndexForNewPage, vpn );
 						}
 				}else
 				{
