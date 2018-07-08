@@ -471,7 +471,7 @@ void AddrSpace::load(unsigned int vpn)
 
 			if ( freeFrame != -1  )
 			{
-				DEBUG('v',"\tFrame libre en memoria: %d\n", freeFrame );				
+				DEBUG('v',"\tFrame libre en memoria: %d\n", freeFrame );
 				pageTable[ vpn ].physicalPage = freeFrame;
 				executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
 				PageSize, noffH.code.inFileAddr + PageSize*vpn );
