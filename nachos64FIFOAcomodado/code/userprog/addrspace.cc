@@ -515,13 +515,11 @@ void AddrSpace::load(unsigned int vpn)
 
 					// cargamos pargina nueva en memoria
 					freeFrame = MemBitMap->Find();
-
 					if ( freeFrame == -1 )
 					{
 						printf("Invalid free frame %d\n", freeFrame );
 						ASSERT( false );
 					}
-
 					//++stats->numPageFaults;
 					pageTable[ vpn ].physicalPage = freeFrame;
 					executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
@@ -565,7 +563,84 @@ void AddrSpace::load(unsigned int vpn)
 			}else
 			{
 				//Se debe selecionar una victima para enviar al SWAP
-				ASSERT(false);
+				// el método es muy similar al de código
+				// revisar si la victima esta en el TLB
+				int tlbIndexForNewPage = findVictimInTLB( indexSWAPFIFO );
+				// revisar si la victima está sucia
+				if ( IPT[indexSWAPFIFO]->dirty )
+				{
+					//si sí
+						//envíarla al swap
+						DEBUG('v',"\t\t\tVictima f=%d,l=%d y  sucia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+						writeIntoSwap( IPT[indexSWAPFIFO]->physicalPage );
+						//pedir el nuevo freeFrame
+						freeFrame = MemBitMap->Find();
+						//validar ese nuevo freeFrame
+						if ( -1 == freeFrame )
+						{
+							printf("Invalid free frame %d\n", freeFrame );
+							ASSERT( false );
+						}
+						// asignar al pageTable[vpn] es freeFrame
+						pageTable[ vpn ].physicalPage = freeFrame;
+						// leer del archivo ejecutable
+						executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
+						PageSize, noffH.code.inFileAddr + PageSize*vpn );
+						//poner valida la paginas
+						pageTable[ vpn ].valid = true;
+						//actualiza la tabla de paginas invertidas
+						IPT[ freeFrame ] = &( pageTable[ vpn ] );
+						//hacer la actualización en la tlb
+						if ( tlbIndexForNewPage == -1 )
+						{
+							DEBUG('v',"NO COPIO en el tlb de la victima la nueva\n" );
+							updateTLBFIFO( vpn );
+						}else
+						{
+							DEBUG('v',"1.1 - Copio en el tlb de la victima a la nueva\n" );
+						}
+				}else
+				{
+					//si no esta sucia
+					DEBUG('v',"\t\t\tVictima f=%d,l=%d y limpia\n",IPT[indexSWAPFIFO]->physicalPage, IPT[indexSWAPFIFO]->virtualPage );
+						// rescatar la antigua fisica de la victima
+						int oldPhysicalPage = IPT[indexSWAPFIFO]->physicalPage;
+						MemBitMap->Clear( oldPhysicalPage );
+						// poner a la victima en  valid = false
+						IPT[indexSWAPFIFO]->valid = false;
+						//ponerle la pagina fisica en -1
+						IPT[indexSWAPFIFO]->physicalPage = -1;
+						// pedir el nuevo freeframe
+						freeFrame = MemBitMap->Find();
+						//validar ese nuevo freeFrame
+						if ( freeFrame == -1 )
+						{
+							printf("Invalid free frame %d\n", freeFrame );
+							ASSERT( false );
+						}
+						//asignar ese freeFrame al pageTable[vpn]
+						pageTable[ vpn ].physicalPage = freeFrame;
+						//leer del archivo ejecutable
+						executable->ReadAt(&(machine->mainMemory[ ( freeFrame * PageSize ) ] ),
+						PageSize, noffH.code.inFileAddr + PageSize*vpn );
+						//valida dicha pageTable[vpn]
+						pageTable[ vpn ].valid = true;
+						//actualizar tabla de paginas invertidas
+						IPT[ freeFrame ] = &(pageTable [ vpn ]);
+						// actualizar la tlp
+						if ( tlbIndexForNewPage == -1 )
+						{
+							DEBUG('v',"NO COPIO en el tlb de la victima la nueva\n" );
+							updateTLBFIFO( vpn );
+						}else
+						{
+							DEBUG('v',"Copio en el tlb de la victima la nueva\n" );
+							useVictimTLBSpace( tlbIndexForNewPage, vpn );
+						}
+				}
+				// aumentar el índice fifo del swap
+				indexSWAPFIFO = ( indexSWAPFIFO +1 )%NumPhysPages;
+				//ASSERT(false);
 			}
 		}
 		else if(vpn >= noInitData && vpn < numPages){ //segemento de Datos No Inicializados o segmento de Pila.
@@ -672,9 +747,6 @@ void AddrSpace::load(unsigned int vpn)
 		//Debo traer la pagina del area de SWAP.
 		DEBUG('v', "\t2- Pagina invalida y sucia\n");
 		DEBUG('v', "\t\tPagina física: %d, pagina virtual= %d\n", pageTable[vpn].physicalPage, pageTable[vpn].virtualPage );
-		//SWAPBitMap->Print();
-		//SWAPBitMap->Clear(pageTable[vpn].physicalPage);
-		//SWAPBitMap->Print();
 		freeFrame = MemBitMap->Find();
 		if(freeFrame != -1)
 		{ //Si hay especio en memoria
@@ -683,16 +755,12 @@ void AddrSpace::load(unsigned int vpn)
 			//actualizar su pagina física de la que leo del swap
 			int oldSwapPageAddr = pageTable [ vpn ].physicalPage;
 			pageTable [ vpn ].physicalPage = freeFrame;
-
 			// cargarla
 			readFromSwap( freeFrame, oldSwapPageAddr );
-
 			// actualizar tambien su validez
 			pageTable [ vpn ].valid = true;
-
 			// actualiza tabla de paginas invertidas
 			IPT[ freeFrame ] = &(pageTable [ vpn ]);
-
 			//actualizar su posición en la tlb
 			updateTLBFIFO( vpn );
 			//ASSERT(false);
