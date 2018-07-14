@@ -84,7 +84,10 @@ Machine::~Machine()
 {
     delete [] mainMemory;
     if (tlb != NULL)
-        delete [] tlb;
+		{
+				delete [] tlb;
+				DEBUG('v',"Machine::~Machine: TLB deleted\n");
+		}
 }
 
 //----------------------------------------------------------------------

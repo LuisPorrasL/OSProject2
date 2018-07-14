@@ -82,6 +82,10 @@ void Nachos_Halt() {                    // System call 0
 
 }// Nachos_Halt
 
+void dummy()
+{
+  return;
+}
 
 void Nachos_Open() {                    // System call 5
   /* System call definition described to user
@@ -125,6 +129,7 @@ void Nachos_Read(){
   char bufferReader[size + 1] = {0}; // store unix result
   int readBytes = 0; // amount of read bytes
   int count = 0;
+  char t = '\n';
 
   // verify if file is one of standar output/input
   switch ( fileId ) {
@@ -135,18 +140,16 @@ void Nachos_Read(){
     printf("%s\n", "Error, can not read from standard error");
     break;
     case ConsoleInput:
-    //fgets( bufferReader, size , stdin );
-    /*readBytes =  read( ConsoleInput,
-    (void *)bufferReader, size );*/
 
     while (count < size )
     {
-      std::cin>> bufferReader[count];
+      t = getchar();
+      bufferReader[count] = t;
       ++count;
     }
 
-    bufferReader[ size + 1 ]= '\0';
     readBytes = strlen( bufferReader );
+    stats->numConsoleCharsRead+=readBytes;
     // write into Nachos mem
     for (int index = 0; index < readBytes; ++  index )
     {
@@ -212,6 +215,7 @@ switch (id) {
   break;
   case  ConsoleOutput:
   printf( "%s", buffer );
+  stats->numConsoleCharsWritten+= strlen(buffer);
   break;
   case ConsoleError:	// This trick permits to write integers to console
   printf( "%d\n", machine->ReadRegister( 4 ) );
@@ -439,6 +443,8 @@ BitMap* execFilesMap = new BitMap(128);
 void Nachos_Exit(){
   /* This user program is done (status = 0 means exited normally). */
   //void Exit(int status);
+  int exitValue = machine->ReadRegister(4);
+  printf("Exit with value: %d\n", exitValue  );
   Thread* nextThread;
   IntStatus oldLevel = interrupt->SetLevel(IntOff);
 
@@ -640,8 +646,6 @@ void ExceptionHandler(ExceptionType which)
         vpn /= PageSize;
         DEBUG('v', "Pagina que falla: %d\n", vpn);
         currentThread->space->load(vpn);
-        ++pageFaultsCounter;
-        DEBUG('t',"Cantidad de pagefaults: %d\n",pageFaultsCounter);
     break;
     case ReadOnlyException:
     printf("\nReadOnlyException\n");

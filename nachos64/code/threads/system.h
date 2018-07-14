@@ -34,10 +34,12 @@ extern Timer *timer;				// the hardware alarm clock
 extern Machine* machine;	// user program memory and registers
 extern BitMap* MemBitMap;
 extern BitMap* SWAPBitMap;
-extern int indexFIFO;
+extern int indexTLBFIFO;
+extern int indexTLBSndChc;
+extern int indexSWAPSndChc;
 extern int indexSWAPFIFO;
-extern int pageFaultsCounter;
 extern TranslationEntry* IPT[NumPhysPages];
+extern bool threadFirstTime;
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB

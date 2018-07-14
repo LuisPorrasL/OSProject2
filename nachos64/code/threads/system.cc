@@ -37,9 +37,11 @@ Machine *machine;
 BitMap* MemBitMap;	// user program memory and registers
 BitMap* SWAPBitMap;
 TranslationEntry* IPT[NumPhysPages];
-int indexFIFO;
+int indexTLBFIFO;
 int indexSWAPFIFO;
-int pageFaultsCounter;
+bool threadFirstTime;
+int indexTLBSndChc;
+int indexSWAPSndChc;
 #endif
 
 #ifdef NETWORK
@@ -91,10 +93,16 @@ void
 Initialize(int argc, char **argv)
 {
     MemBitMap =  new BitMap( NumPhysPages );
-		SWAPBitMap =  new BitMap((NumPhysPages*2>64)?(NumPhysPages*2):64);
-		indexFIFO = 0;
+		SWAPBitMap =  new BitMap( SWAPSize );
+		indexTLBFIFO = 0;
     indexSWAPFIFO = 0;
-    pageFaultsCounter = 0;
+    threadFirstTime = true;
+    indexTLBSndChc = 0;
+    indexSWAPSndChc = 0;
+    for (int index = 0; index < NumPhysPages; ++index)
+    {
+      IPT[index] = NULL;
+    }
     int argCount;
     const char* debugArgs = "";
     bool randomYield = false;

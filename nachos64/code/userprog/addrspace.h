@@ -18,7 +18,6 @@
 #include <string>
 
 #define UserStackSize		1024 	// increase this as necessary!
-#define SWAPFILENAME "SWAP.txt"
 
 class AddrSpace {
 public:
@@ -50,13 +49,22 @@ private:
   void showTLBState();
   void showIPTState();
   void showPageTableState();
-  int writeIntoSwap( int physicalPageVictim );
-  void readFromSwap( int swapPage, int physicalPage );
+  void writeIntoSwap( int physicalPageVictim );
+  void readFromSwap( int physicalPage , int swapPage);
   void updateTLBSC(unsigned int vpn);
-  void updateTLBFIFO(unsigned int vpn);
+  int updateTLBFIFO(unsigned int vpn);
   void validateSWAPCaseFIFO();
   void takeFromSWAPToMem( unsigned int vpn );
   void clearPhysicalPage( int physicalPage );
+  void useVictimTLBSpace(int tlbIndex, int vpn );
+  int  findVictimInTLB( int indexSWAP );
+  ///////////para secondChance TLB
+  int  getNextSCTLB();
+  void useThisTLBIndex( int tlbIndex, int vpn );
+  void saveVictimTLBInfo( int tlbIndex, int oldUse );
+  ///////////para secondChance SWAP
+  int  getNextSCSWAP();
+  void updateSwapVictimInfo( int swapIndex );
 
   // for now!
   // address space
